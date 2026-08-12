@@ -11,6 +11,18 @@ db.execute("""
     )
 """)
 
+db.execute("""
+    CREATE TABLE IF NOT EXISTS inventory (
+        id INTEGER PRIMARY KEY,
+        date TEXT NOT NULL,
+        item_id INTEGER NOT NULL,
+        amount REAL NOT NULL,
+        unit TEXT NOT NULL,
+        UNIQUE(date, item_id),
+        FOREIGN KEY (item_id) REFERENCES items(id)
+    )
+""")
+
 db.commit()
 
 # Error exposure
@@ -38,3 +50,25 @@ def get_items():
         ORDER BY id
     """).fetchall()
 
+def add_inventory(date, item_id, amount, unit):
+    try:
+        db.execute(
+            """
+            INSERT INTO inventory (date, item_id, amount, unit)
+            VALUES (?, ?, ?, ?)
+            """,
+            (date, item_id, amount, unit)
+        )
+        db.commit()
+        return True
+
+    except IntegrityError:
+        return False
+
+def get_inventory():
+    return db.execute("""
+        SELECT inventory.date, items.name, inventory.amount, inventory.unit
+        FROM inventory
+        JOIN items ON inventory.item_id = items.id
+        ORDER BY inventory.date, inventory.item_id
+    """).fetchall()
