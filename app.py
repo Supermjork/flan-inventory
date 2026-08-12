@@ -1,11 +1,9 @@
 import flet as ft
-import sqlite3
+from database import db, IntegrityError
 
 
 def main(page: ft.Page):
     page.title = "Kitchen Inventory"
-
-    db = sqlite3.connect("inventory.db")
 
     db.execute("""
         CREATE TABLE IF NOT EXISTS items (
@@ -48,7 +46,7 @@ def main(page: ft.Page):
             )
             db.commit()
 
-        except sqlite3.IntegrityError:
+        except IntegrityError:
             message.value = "Item already exists."
             page.update()
             return
