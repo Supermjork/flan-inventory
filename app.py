@@ -10,14 +10,14 @@ def main(page: ft.Page):
     db.execute("""
         CREATE TABLE IF NOT EXISTS items (
             id INTEGER PRIMARY KEY,
-            name TEXT NOT NULL UNIQUE
+            name TEXT NOT NULL COLLATE NOCASE UNIQUE
         )
     """)
     db.commit()
 
-    item_name = ft.TextField(label="Item name")
-
     items_list = ft.Column()
+
+    message = ft.Text()
 
     def load_items():
         items_list.controls.clear()
@@ -49,12 +49,19 @@ def main(page: ft.Page):
             db.commit()
 
         except sqlite3.IntegrityError:
-            print("Item already exists.")
+            message.value = "Item already exists."
+            page.update()
             return
 
+        message.value = ""
         item_name.value = ""
         load_items()
 
+    item_name = ft.TextField(
+        label="Item name",
+        on_submit=add_item
+    )
+    
     add_button = ft.Button(
         content="Add",
         on_click=add_item
@@ -66,6 +73,7 @@ def main(page: ft.Page):
             item_name,
             add_button
         ]),
+        message,
         ft.Divider(),
         items_list
     )
