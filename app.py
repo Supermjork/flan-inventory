@@ -1,17 +1,9 @@
 import flet as ft
-from database import db, IntegrityError
+from database import db, IntegrityError, add_item as add_item_to_database, get_items
 
 
 def main(page: ft.Page):
     page.title = "Kitchen Inventory"
-
-    db.execute("""
-        CREATE TABLE IF NOT EXISTS items (
-            id INTEGER PRIMARY KEY,
-            name TEXT NOT NULL COLLATE NOCASE UNIQUE
-        )
-    """)
-    db.commit()
 
     items_list = ft.Column()
 
@@ -20,11 +12,7 @@ def main(page: ft.Page):
     def load_items():
         items_list.controls.clear()
 
-        rows = db.execute("""
-            SELECT id, name
-            FROM items
-            ORDER BY id
-        """).fetchall()
+        rows = get_items()
 
         for item_id, name in rows:
             items_list.controls.append(
@@ -38,15 +26,7 @@ def main(page: ft.Page):
 
         if not name:
             return
-
-        try:
-            db.execute(
-                "INSERT INTO items (name) VALUES (?)",
-                (name,)
-            )
-            db.commit()
-
-        except IntegrityError:
+        if not add_item_to_database(name):
             message.value = "Item already exists."
             page.update()
             return
@@ -59,7 +39,7 @@ def main(page: ft.Page):
         label="Item name",
         on_submit=add_item
     )
-    
+
     add_button = ft.Button(
         content="Add",
         on_click=add_item
