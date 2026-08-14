@@ -7,7 +7,8 @@ db = sqlite3.connect("inventory.db")
 db.execute("""
     CREATE TABLE IF NOT EXISTS items (
         id INTEGER PRIMARY KEY,
-        name TEXT NOT NULL COLLATE NOCASE UNIQUE
+        name TEXT NOT NULL COLLATE NOCASE UNIQUE,
+        unit TEXT NOT NULL
     )
 """)
 
@@ -31,11 +32,11 @@ IntegrityError = sqlite3.IntegrityError
 
 # Function suite
 
-def add_item(name):
+def add_item(name, unit):
     try:
         db.execute(
-            "INSERT INTO items (name) VALUES (?)",
-            (name,)
+            "INSERT INTO items (name, unit) VALUES (?, ?)",
+            (name, unit)
         )
         db.commit()
         return True
@@ -45,7 +46,7 @@ def add_item(name):
 
 def get_items():
     return db.execute("""
-        SELECT id, name
+        SELECT id, name, unit
         FROM items
         ORDER BY id
     """).fetchall()

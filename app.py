@@ -17,7 +17,7 @@ def load_items(page: ft.Page, items_list: ft.Column):
 
     rows = get_items()
 
-    for item_id, name in rows:
+    for item_id, name, unit in rows:
         items_list.controls.append(
             ft.Text(f"{item_id} — {name}")
         )
@@ -28,36 +28,63 @@ def load_items(page: ft.Page, items_list: ft.Column):
 def load_inventory_items(page: ft.Page, inventory_item: ft.Dropdown):
     inventory_item.options.clear()
 
-    for item_id, name in get_items():
+    for item_id, name, unit in get_items():
         inventory_item.options.append(
             ft.DropdownOption(
                 key=str(item_id),
-                text=name
+                text=name,
+                data=unit
             )
         )
 
     page.update()
 
+def select_inventory_item(
+    e,
+    inventory_item: ft.Dropdown,
+    inventory_unit: ft.TextField
+):
+    if not e.control.value:
+        inventory_unit.value = ""
+        return
+
+    selected_option = next(
+        (
+            option
+            for option in inventory_item.options
+            if option.key == e.control.value
+        ),
+        None
+    )
+
+    if selected_option:
+        inventory_unit.value = selected_option.data
+
+    inventory_unit.update()
+
 
 def add_item(
     page: ft.Page,
     item_name: ft.TextField,
+    item_unit: ft.TextField,
     items_list: ft.Column,
     message: ft.Text,
     inventory_item: ft.Dropdown
 ):
     name = item_name.value.strip()
+    unit = item_unit.value.strip()
 
-    if not name:
+    if not name or not unit:
         return
 
-    if not add_item_to_database(name):
+    if not add_item_to_database(name, unit):
         message.value = "Item already exists."
         page.update()
         return
 
     message.value = ""
     item_name.value = ""
+    item_unit.value = ""
 
     load_items(page, items_list)
     load_inventory_items(page, inventory_item)
@@ -168,6 +195,20 @@ def main(page: ft.Page):
         on_submit=lambda: add_item(
             page,
             item_name,
+            item_unit,
+            items_list,
+            message,
+            inventory_item
+        ),
+        expand=True
+    )
+
+    item_unit = ft.TextField(
+        label="Unit",
+        on_submit=lambda e: add_item(
+            page,
+            item_name,
+            item_unit,
             items_list,
             message,
             inventory_item
@@ -180,6 +221,7 @@ def main(page: ft.Page):
         on_click=lambda: add_item(
             page,
             item_name,
+            item_unit,
             items_list,
             message,
             inventory_item
@@ -198,6 +240,7 @@ def main(page: ft.Page):
         content=ft.Column(
             controls=[
                 item_name,
+                item_unit,
                 message
             ],
             tight=True
@@ -219,6 +262,11 @@ def main(page: ft.Page):
 
     inventory_item = ft.Dropdown(
         label="Item",
+        on_select=lambda e: select_inventory_item(
+            e,
+            inventory_item,
+            inventory_unit
+        ),
         expand=True
     )
 
