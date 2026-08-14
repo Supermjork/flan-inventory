@@ -709,6 +709,7 @@ def main(page: ft.Page):
 
     item_name = ft.TextField(
         label="Item name",
+        width=320,
         on_submit=lambda: add_item(
             page,
             item_name,
@@ -717,12 +718,12 @@ def main(page: ft.Page):
             message,
             inventory_item,
             inventory_list
-        ),
-        expand=True
+        )
     )
 
     item_unit = ft.TextField(
         label="Unit",
+        width=320,
         on_submit=lambda e: add_item(
             page,
             item_name,
@@ -731,8 +732,7 @@ def main(page: ft.Page):
             message,
             inventory_item,
             inventory_list
-        ),
-        expand=True
+        )
     )
 
     add_button = ft.Button(
@@ -745,8 +745,7 @@ def main(page: ft.Page):
             message,
             inventory_item,
             inventory_list
-        ),
-        expand=True
+        )
     )
 
     close_add_item_button = ft.Button(
@@ -763,12 +762,15 @@ def main(page: ft.Page):
                 item_unit,
                 message
             ],
-            tight=True
+            tight=True,
+            spacing=15,
+            width=320
         ),
         actions=[
             close_add_item_button,
             add_button
-        ]
+        ],
+        actions_alignment=ft.MainAxisAlignment.END
     )
 
     open_add_item_button = ft.Button(
@@ -782,21 +784,21 @@ def main(page: ft.Page):
 
     inventory_item = ft.Dropdown(
         label="Item",
+        width=320,
         on_select=lambda e: select_inventory_item(
             e,
             inventory_item,
             inventory_unit
-        ),
-        expand=True
+        )
     )
 
     inventory_date = ft.TextField(
         label="Date",
+        width=320,
         value=datetime.now().strftime("%Y-%m-%d"),
         read_only=True,
         suffix_icon=ft.Icons.CALENDAR_MONTH,
-        on_click=lambda e: page.show_dialog(inventory_date_picker),
-        expand=True
+        on_click=lambda e: page.show_dialog(inventory_date_picker)
     )
 
     def on_inventory_date_change(e):
@@ -812,6 +814,7 @@ def main(page: ft.Page):
 
     inventory_amount = ft.TextField(
         label="Amount",
+        width=320,
         on_submit=lambda e: add_inventory_record(
             page,
             inventory_date,
@@ -820,12 +823,13 @@ def main(page: ft.Page):
             inventory_unit,
             inventory_message,
             inventory_list
-        ),
-        expand=True
+        )
     )
 
     inventory_unit = ft.TextField(
         label="Unit",
+        width=320,
+        read_only=True,
         on_submit=lambda e: add_inventory_record(
             page,
             inventory_date,
@@ -834,8 +838,7 @@ def main(page: ft.Page):
             inventory_unit,
             inventory_message,
             inventory_list
-        ),
-        expand=True
+        )
     )
 
     inventory_add_button = ft.Button(
@@ -848,8 +851,7 @@ def main(page: ft.Page):
             inventory_unit,
             inventory_message,
             inventory_list
-        ),
-        expand=True
+        )
     )
 
     close_inventory_button = ft.Button(
@@ -868,12 +870,15 @@ def main(page: ft.Page):
                 inventory_unit,
                 inventory_message
             ],
-            tight=True
+            tight=True,
+            spacing=15,
+            width=320
         ),
         actions=[
             close_inventory_button,
             inventory_add_button
-        ]
+        ],
+        actions_alignment=ft.MainAxisAlignment.END
     )
 
     open_inventory_button = ft.Button(
