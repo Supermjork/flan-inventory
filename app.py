@@ -12,8 +12,13 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph
 from database import (
     add_item as add_item_to_database,
     get_items,
+    update_item,
+    count_inventory_for_item,
+    delete_item,
     add_inventory,
-    get_inventory
+    get_inventory,
+    update_inventory_record,
+    delete_inventory_record
 )
 
 
@@ -21,17 +26,152 @@ from database import (
 # Functions
 # -------------------------
 
-def load_items(page: ft.Page, items_list: ft.Column):
+def load_items(
+    page: ft.Page,
+    items_list: ft.Column,
+    inventory_item: ft.Dropdown,
+    inventory_list: ft.Column
+):
     items_list.controls.clear()
 
     rows = get_items()
 
     for item_id, name, unit in rows:
         items_list.controls.append(
-            ft.Text(f"{item_id} — {name}")
+            ft.Row(
+                controls=[
+                    ft.Text(f"{item_id} — {name} ({unit})", expand=True),
+                    ft.IconButton(
+                        icon=ft.Icons.EDIT,
+                        tooltip="Edit item",
+                        on_click=lambda e, iid=item_id, nm=name, un=unit: (
+                            open_edit_item_dialog(
+                                page,
+                                iid,
+                                nm,
+                                un,
+                                items_list,
+                                inventory_item,
+                                inventory_list
+                            )
+                        )
+                    ),
+                    ft.IconButton(
+                        icon=ft.Icons.DELETE,
+                        tooltip="Delete item",
+                        on_click=lambda e, iid=item_id, nm=name: (
+                            open_delete_item_dialog(
+                                page,
+                                iid,
+                                nm,
+                                items_list,
+                                inventory_item,
+                                inventory_list
+                            )
+                        )
+                    )
+                ]
+            )
         )
 
     page.update()
+
+def open_edit_item_dialog(
+    page: ft.Page,
+    item_id: int,
+    name: str,
+    unit: str,
+    items_list: ft.Column,
+    inventory_item: ft.Dropdown,
+    inventory_list: ft.Column
+):
+    name_field = ft.TextField(label="Name", value=name)
+    unit_field = ft.TextField(label="Unit", value=unit)
+    message = ft.Text()
+
+    def save(e):
+        new_name = name_field.value.strip()
+        new_unit = unit_field.value.strip()
+
+        if not new_name or not new_unit:
+            return
+
+        if not update_item(item_id, new_name, new_unit):
+            message.value = "An item with that name already exists."
+            page.update()
+            return
+
+        load_items(page, items_list, inventory_item, inventory_list)
+        load_inventory_items(page, inventory_item)
+        load_inventory(page, inventory_list)
+
+        page.pop_dialog()
+
+    page.show_dialog(
+        ft.AlertDialog(
+            modal=True,
+            title=ft.Text("Edit Item"),
+            content=ft.Column(
+                controls=[name_field, unit_field, message],
+                tight=True
+            ),
+            actions=[
+                ft.Button(
+                    content="Cancel",
+                    on_click=lambda e: page.pop_dialog()
+                ),
+                ft.Button(
+                    content="Save",
+                    on_click=save
+                )
+            ]
+        )
+    )
+
+def open_delete_item_dialog(
+    page: ft.Page,
+    item_id: int,
+    name: str,
+    items_list: ft.Column,
+    inventory_item: ft.Dropdown,
+    inventory_list: ft.Column
+):
+    record_count = count_inventory_for_item(item_id)
+
+    if record_count:
+        warning_text = (
+            f'"{name}" has records. Are you sure you want to delete '
+            "everything related to this item?"
+        )
+    else:
+        warning_text = f'Delete "{name}"?'
+
+    def confirm_delete(e):
+        delete_item(item_id)
+
+        load_items(page, items_list, inventory_item, inventory_list)
+        load_inventory_items(page, inventory_item)
+        load_inventory(page, inventory_list)
+
+        page.pop_dialog()
+
+    page.show_dialog(
+        ft.AlertDialog(
+            modal=True,
+            title=ft.Text("Delete Item"),
+            content=ft.Text(warning_text),
+            actions=[
+                ft.Button(
+                    content="Cancel",
+                    on_click=lambda e: page.pop_dialog()
+                ),
+                ft.Button(
+                    content="Delete",
+                    on_click=confirm_delete
+                )
+            ]
+        )
+    )
 
 
 def load_inventory_items(page: ft.Page, inventory_item: ft.Dropdown):
@@ -78,7 +218,8 @@ def add_item(
     item_unit: ft.TextField,
     items_list: ft.Column,
     message: ft.Text,
-    inventory_item: ft.Dropdown
+    inventory_item: ft.Dropdown,
+    inventory_list: ft.Column
 ):
     name = item_name.value.strip()
     unit = item_unit.value.strip()
@@ -95,7 +236,7 @@ def add_item(
     item_name.value = ""
     item_unit.value = ""
 
-    load_items(page, items_list)
+    load_items(page, items_list, inventory_item, inventory_list)
     load_inventory_items(page, inventory_item)
 
     page.pop_dialog()
@@ -106,15 +247,147 @@ def load_inventory(page: ft.Page, inventory_list: ft.Column):
 
     rows = get_inventory()
 
-    for date, item_name, amount, unit in rows:
+    for record_id, date, item_name, amount, unit in rows:
         inventory_list.controls.append(
-            ft.Text(
-                f"{date} — {item_name}: "
-                f"{amount} {unit}"
+            ft.Row(
+                controls=[
+                    ft.Text(
+                        f"{date} — {item_name}: {amount} {unit}",
+                        expand=True
+                    ),
+                    ft.IconButton(
+                        icon=ft.Icons.EDIT,
+                        tooltip="Edit record",
+                        on_click=lambda e, rid=record_id, dt=date, amt=amount: (
+                            open_edit_inventory_dialog(
+                                page,
+                                rid,
+                                dt,
+                                amt,
+                                inventory_list
+                            )
+                        )
+                    ),
+                    ft.IconButton(
+                        icon=ft.Icons.DELETE,
+                        tooltip="Delete record",
+                        on_click=lambda e, rid=record_id: (
+                            open_delete_inventory_dialog(
+                                page,
+                                rid,
+                                inventory_list
+                            )
+                        )
+                    )
+                ]
             )
         )
 
     page.update()
+
+def open_edit_inventory_dialog(
+    page: ft.Page,
+    record_id: int,
+    date: str,
+    amount: float,
+    inventory_list: ft.Column
+):
+    amount_field = ft.TextField(label="Amount", value=str(amount))
+    message = ft.Text()
+
+    date_field = ft.TextField(
+        label="Date",
+        value=date,
+        read_only=True,
+        suffix_icon=ft.Icons.CALENDAR_MONTH,
+        on_click=lambda e: page.show_dialog(date_picker)
+    )
+
+    def on_date_change(e):
+        date_field.value = e.control.value.strftime("%Y-%m-%d")
+        date_field.update()
+
+    date_picker = ft.DatePicker(
+        value=datetime.strptime(date, "%Y-%m-%d"),
+        first_date=datetime(2020, 1, 1),
+        last_date=datetime(2100, 12, 31),
+        on_change=on_date_change
+    )
+
+    def save(e):
+        new_date = date_field.value.strip()
+        new_amount_text = amount_field.value.strip()
+
+        try:
+            new_amount = float(new_amount_text)
+        except ValueError:
+            message.value = "Amount must be a number."
+            page.update()
+            return
+
+        if new_amount < 0:
+            message.value = "Amount cannot be negative."
+            page.update()
+            return
+
+        if not update_inventory_record(record_id, new_date, new_amount):
+            message.value = (
+                "A record already exists for this item and date."
+            )
+            page.update()
+            return
+
+        load_inventory(page, inventory_list)
+        page.pop_dialog()
+
+    page.show_dialog(
+        ft.AlertDialog(
+            modal=True,
+            title=ft.Text("Edit Inventory Record"),
+            content=ft.Column(
+                controls=[date_field, amount_field, message],
+                tight=True
+            ),
+            actions=[
+                ft.Button(
+                    content="Cancel",
+                    on_click=lambda e: page.pop_dialog()
+                ),
+                ft.Button(
+                    content="Save",
+                    on_click=save
+                )
+            ]
+        )
+    )
+
+def open_delete_inventory_dialog(
+    page: ft.Page,
+    record_id: int,
+    inventory_list: ft.Column
+):
+    def confirm_delete(e):
+        delete_inventory_record(record_id)
+        load_inventory(page, inventory_list)
+        page.pop_dialog()
+
+    page.show_dialog(
+        ft.AlertDialog(
+            modal=True,
+            title=ft.Text("Delete Record"),
+            content=ft.Text("Delete this inventory record?"),
+            actions=[
+                ft.Button(
+                    content="Cancel",
+                    on_click=lambda e: page.pop_dialog()
+                ),
+                ft.Button(
+                    content="Delete",
+                    on_click=confirm_delete
+                )
+            ]
+        )
+    )
 
 
 def add_inventory_record(
@@ -190,7 +463,7 @@ def get_inventory_table_data():
     # (date, item_id) -> amount
     inventory_lookup = {}
 
-    for date, item_name, amount, unit in inventory:
+    for record_id, date, item_name, amount, unit in inventory:
         for item_id, name, item_unit in items:
             if name == item_name:
                 inventory_lookup[(date, item_id)] = amount
@@ -198,7 +471,7 @@ def get_inventory_table_data():
 
     # Get all dates in the inventory records
     dates = sorted(
-        set(date for date, _, _, _ in inventory)
+        set(date for _, date, _, _, _ in inventory)
     )
 
     # Create a continuous date range
@@ -442,7 +715,8 @@ def main(page: ft.Page):
             item_unit,
             items_list,
             message,
-            inventory_item
+            inventory_item,
+            inventory_list
         ),
         expand=True
     )
@@ -455,7 +729,8 @@ def main(page: ft.Page):
             item_unit,
             items_list,
             message,
-            inventory_item
+            inventory_item,
+            inventory_list
         ),
         expand=True
     )
@@ -468,7 +743,8 @@ def main(page: ft.Page):
             item_unit,
             items_list,
             message,
-            inventory_item
+            inventory_item,
+            inventory_list
         ),
         expand=True
     )
@@ -731,7 +1007,7 @@ def main(page: ft.Page):
         )
     )
 
-    load_items(page, items_list)
+    load_items(page, items_list, inventory_item, inventory_list)
     load_inventory_items(page, inventory_item)
     load_inventory(page, inventory_list)
 

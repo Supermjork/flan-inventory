@@ -51,6 +51,31 @@ def get_items():
         ORDER BY id
     """).fetchall()
 
+def update_item(item_id, name, unit):
+    try:
+        db.execute(
+            "UPDATE items SET name = ?, unit = ? WHERE id = ?",
+            (name, unit, item_id)
+        )
+        db.commit()
+        return True
+
+    except IntegrityError:
+        return False
+
+def count_inventory_for_item(item_id):
+    row = db.execute(
+        "SELECT COUNT(*) FROM inventory WHERE item_id = ?",
+        (item_id,)
+    ).fetchone()
+
+    return row[0]
+
+def delete_item(item_id):
+    db.execute("DELETE FROM inventory WHERE item_id = ?", (item_id,))
+    db.execute("DELETE FROM items WHERE id = ?", (item_id,))
+    db.commit()
+
 def add_inventory(date, item_id, amount, unit):
     try:
         db.execute(
@@ -68,8 +93,25 @@ def add_inventory(date, item_id, amount, unit):
 
 def get_inventory():
     return db.execute("""
-        SELECT inventory.date, items.name, inventory.amount, inventory.unit
+        SELECT inventory.id, inventory.date, items.name,
+               inventory.amount, inventory.unit
         FROM inventory
         JOIN items ON inventory.item_id = items.id
         ORDER BY inventory.date, inventory.item_id
     """).fetchall()
+
+def update_inventory_record(record_id, date, amount):
+    try:
+        db.execute(
+            "UPDATE inventory SET date = ?, amount = ? WHERE id = ?",
+            (date, amount, record_id)
+        )
+        db.commit()
+        return True
+
+    except IntegrityError:
+        return False
+
+def delete_inventory_record(record_id):
+    db.execute("DELETE FROM inventory WHERE id = ?", (record_id,))
+    db.commit()
