@@ -3,6 +3,12 @@ import flet_datatable2 as fdt
 import csv
 from pathlib import Path
 from datetime import datetime, timedelta
+from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill
+from reportlab.lib.pagesizes import letter, landscape
+from reportlab.lib import colors as pdf_colors
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph
 from database import (
     add_item as add_item_to_database,
     get_items,
@@ -290,13 +296,17 @@ def show_inventory_table(page: ft.Page, inventory_table_dialog: ft.AlertDialog):
 
     page.show_dialog(inventory_table_dialog)
 
-def export_inventory_csv(filename):
-    items, rows = get_inventory_table_data()
-
+def get_inventory_table_headers(items):
     headers = ["Date"]
 
     for item_id, name, unit in items:
         headers.append(f"{name} ({unit})")
+
+    return headers
+
+def export_inventory_csv(filename):
+    items, rows = get_inventory_table_data()
+    headers = get_inventory_table_headers(items)
 
     with open(
         filename,
@@ -311,17 +321,91 @@ def export_inventory_csv(filename):
         for row in rows:
             writer.writerow(row)
 
-def save_inventory_csv(page: ft.Page, save_message: ft.Text):
-    downloads_dir = Path.home() / "Downloads"
-    downloads_dir.mkdir(parents=True, exist_ok=True)
+def export_inventory_xlsx(filename):
+    items, rows = get_inventory_table_data()
+    headers = get_inventory_table_headers(items)
 
-    filename = downloads_dir / (
-        f"inventory_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Inventory"
+
+    sheet.append(headers)
+
+    for cell in sheet[1]:
+        cell.font = Font(bold=True)
+        cell.fill = PatternFill(
+            start_color="DDDDDD",
+            end_color="DDDDDD",
+            fill_type="solid"
+        )
+
+    for row in rows:
+        sheet.append(row)
+
+    for column_cells in sheet.columns:
+        max_length = max(
+            len(str(cell.value)) for cell in column_cells
+        )
+        sheet.column_dimensions[
+            column_cells[0].column_letter
+        ].width = min(max(max_length + 2, 10), 40)
+
+    workbook.save(filename)
+
+def export_inventory_pdf(filename):
+    items, rows = get_inventory_table_data()
+    headers = get_inventory_table_headers(items)
+
+    styles = getSampleStyleSheet()
+    title = Paragraph("Kitchen Inventory", styles["Title"])
+
+    table = Table([headers] + rows, repeatRows=1)
+    table.setStyle(
+        TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), pdf_colors.HexColor("#DDDDDD")),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("GRID", (0, 0), (-1, -1), 0.5, pdf_colors.grey),
+            ("FONTSIZE", (0, 0), (-1, -1), 8),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ])
     )
 
-    export_inventory_csv(str(filename))
+    doc = SimpleDocTemplate(filename, pagesize=landscape(letter))
+    doc.build([title, table])
 
-    save_message.value = f"Saved to {filename}"
+EXPORTERS = {
+    "csv": export_inventory_csv,
+    "xlsx": export_inventory_xlsx,
+    "pdf": export_inventory_pdf,
+}
+
+def save_inventory(page: ft.Page, save_message: ft.Text, file_format: str):
+    items, rows = get_inventory_table_data()
+
+    if not rows:
+        save_message.value = "No inventory data to export."
+        save_message.color = "red"
+        page.update()
+        return
+
+    try:
+        downloads_dir = Path.home() / "Downloads"
+        downloads_dir.mkdir(parents=True, exist_ok=True)
+
+        filename = downloads_dir / (
+            f"inventory_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            f".{file_format}"
+        )
+
+        EXPORTERS[file_format](str(filename))
+
+        save_message.value = f"Saved to {filename}"
+        save_message.color = "green"
+
+    except Exception as error:
+        save_message.value = f"Save failed: {error}"
+        save_message.color = "red"
+
     page.update()
 
 def main(page: ft.Page):
@@ -515,9 +599,28 @@ def main(page: ft.Page):
 
     export_csv_button = ft.Button(
         content="Export CSV",
-        on_click=lambda e: save_inventory_csv(
+        on_click=lambda e: save_inventory(
             page,
-            save_message
+            save_message,
+            "csv"
+        )
+    )
+
+    export_xlsx_button = ft.Button(
+        content="Export XLSX",
+        on_click=lambda e: save_inventory(
+            page,
+            save_message,
+            "xlsx"
+        )
+    )
+
+    export_pdf_button = ft.Button(
+        content="Export PDF",
+        on_click=lambda e: save_inventory(
+            page,
+            save_message,
+            "pdf"
         )
     )
 
@@ -532,8 +635,7 @@ def main(page: ft.Page):
         content=ft.Container(
             content=ft.Column(
                 controls=[
-                    inventory_table,
-                    save_message
+                    inventory_table
                 ],
                 scroll=ft.ScrollMode.AUTO,
                 expand=True
@@ -542,8 +644,17 @@ def main(page: ft.Page):
             width=900
         ),
         actions=[
-            export_csv_button,
-            close_inventory_table_button
+            ft.Row(
+                controls=[
+                    save_message,
+                    export_csv_button,
+                    export_xlsx_button,
+                    export_pdf_button,
+                    close_inventory_table_button
+                ],
+                alignment=ft.MainAxisAlignment.END,
+                spacing=10
+            )
         ]
     )
 
