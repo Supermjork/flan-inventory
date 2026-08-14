@@ -516,17 +516,22 @@ def main(page: ft.Page):
 
     inventory_date = ft.TextField(
         label="Date",
-        value="2026-08-12",
-        on_submit=lambda e: add_inventory_record(
-            page,
-            inventory_date,
-            inventory_item,
-            inventory_amount,
-            inventory_unit,
-            inventory_message,
-            inventory_list
-        ),
+        value=datetime.now().strftime("%Y-%m-%d"),
+        read_only=True,
+        suffix_icon=ft.Icons.CALENDAR_MONTH,
+        on_click=lambda e: page.show_dialog(inventory_date_picker),
         expand=True
+    )
+
+    def on_inventory_date_change(e):
+        inventory_date.value = e.control.value.strftime("%Y-%m-%d")
+        inventory_date.update()
+
+    inventory_date_picker = ft.DatePicker(
+        value=datetime.now(),
+        first_date=datetime(2020, 1, 1),
+        last_date=datetime(2100, 12, 31),
+        on_change=on_inventory_date_change
     )
 
     inventory_amount = ft.TextField(
