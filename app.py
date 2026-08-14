@@ -1,5 +1,7 @@
 import flet as ft
 import flet_datatable2 as fdt
+import csv
+from pathlib import Path
 from datetime import datetime, timedelta
 from database import (
     add_item as add_item_to_database,
@@ -288,6 +290,40 @@ def show_inventory_table(page: ft.Page, inventory_table_dialog: ft.AlertDialog):
 
     page.show_dialog(inventory_table_dialog)
 
+def export_inventory_csv(filename):
+    items, rows = get_inventory_table_data()
+
+    headers = ["Date"]
+
+    for item_id, name, unit in items:
+        headers.append(f"{name} ({unit})")
+
+    with open(
+        filename,
+        "w",
+        newline="",
+        encoding="utf-8"
+    ) as file:
+        writer = csv.writer(file)
+
+        writer.writerow(headers)
+
+        for row in rows:
+            writer.writerow(row)
+
+def save_inventory_csv(page: ft.Page, save_message: ft.Text):
+    downloads_dir = Path.home() / "Downloads"
+    downloads_dir.mkdir(parents=True, exist_ok=True)
+
+    filename = downloads_dir / (
+        f"inventory_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+    )
+
+    export_inventory_csv(str(filename))
+
+    save_message.value = f"Saved to {filename}"
+    page.update()
+
 def main(page: ft.Page):
     page.title = "Kitchen Inventory"
 
@@ -475,6 +511,16 @@ def main(page: ft.Page):
 
     inventory_table = build_inventory_table()
 
+    save_message = ft.Text()
+
+    export_csv_button = ft.Button(
+        content="Export CSV",
+        on_click=lambda e: save_inventory_csv(
+            page,
+            save_message
+        )
+    )
+
     close_inventory_table_button = ft.Button(
         content="Close",
         on_click=lambda e: page.pop_dialog()
@@ -486,7 +532,8 @@ def main(page: ft.Page):
         content=ft.Container(
             content=ft.Column(
                 controls=[
-                    inventory_table
+                    inventory_table,
+                    save_message
                 ],
                 scroll=ft.ScrollMode.AUTO,
                 expand=True
@@ -495,6 +542,7 @@ def main(page: ft.Page):
             width=900
         ),
         actions=[
+            export_csv_button,
             close_inventory_table_button
         ]
     )
