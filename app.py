@@ -1,5 +1,6 @@
 import flet as ft
-from datetime import datetime
+import flet_datatable2 as fdt
+from datetime import datetime, timedelta
 from database import (
     add_item as add_item_to_database,
     get_items,
@@ -170,6 +171,122 @@ def add_inventory_record(
 
     page.pop_dialog()
 
+def get_inventory_table_data():
+    items = get_items()
+    inventory = get_inventory()
+
+    if not inventory:
+        return [], []
+
+    # Create a lookup:
+    # (date, item_id) -> amount
+    inventory_lookup = {}
+
+    for date, item_name, amount, unit in inventory:
+        for item_id, name, item_unit in items:
+            if name == item_name:
+                inventory_lookup[(date, item_id)] = amount
+                break
+
+    # Get all dates in the inventory records
+    dates = sorted(
+        set(date for date, _, _, _ in inventory)
+    )
+
+    # Create a continuous date range
+    start_date = datetime.strptime(
+        dates[0],
+        "%Y-%m-%d"
+    )
+    end_date = datetime.strptime(
+        dates[-1],
+        "%Y-%m-%d"
+    )
+
+    current_date = start_date
+    all_dates = []
+
+    while current_date <= end_date:
+        all_dates.append(
+            current_date.strftime("%Y-%m-%d")
+        )
+
+        current_date += timedelta(days=1)
+
+    # Build the table rows
+    rows = []
+
+    for date in all_dates:
+        row = [date]
+
+        for item_id, name, unit in items:
+            amount = inventory_lookup.get(
+                (date, item_id)
+            )
+
+            if amount is None:
+                row.append("No inventory data for this date")
+            else:
+                row.append(str(amount))
+
+        rows.append(row)
+
+    return items, rows
+
+def build_inventory_table():
+    items, rows = get_inventory_table_data()
+
+    columns = [
+        fdt.DataColumn2(
+            label=ft.Text("Date"),
+            fixed_width=120
+        )
+    ]
+
+    for item_id, name, unit in items:
+        columns.append(
+            fdt.DataColumn2(
+                label=ft.Text(f"{name} ({unit})"),
+                fixed_width=180
+            )
+        )
+
+    table_rows = []
+
+    for row in rows:
+        cells = []
+
+        for value in row:
+            cells.append(
+                ft.DataCell(
+                    ft.Text(value)
+                )
+            )
+
+        table_rows.append(
+            ft.DataRow(
+                cells=cells
+            )
+        )
+
+    return fdt.DataTable2(
+        columns=columns,
+        rows=table_rows,
+        fixed_top_rows=1,
+        fixed_left_columns=1,
+        min_width=1200,
+        visible_horizontal_scroll_bar=True,
+        visible_vertical_scroll_bar=True
+    )
+
+def show_inventory_table(page: ft.Page, inventory_table_dialog: ft.AlertDialog):
+    inventory_table_dialog.content = ft.Container(
+        content=build_inventory_table(),
+        height=500,
+        width=900
+    )
+
+    page.show_dialog(inventory_table_dialog)
 
 def main(page: ft.Page):
     page.title = "Kitchen Inventory"
@@ -356,6 +473,40 @@ def main(page: ft.Page):
         on_click=lambda: page.show_dialog(inventory_dialog)
     )
 
+    inventory_table = build_inventory_table()
+
+    close_inventory_table_button = ft.Button(
+        content="Close",
+        on_click=lambda e: page.pop_dialog()
+    )
+
+    inventory_table_dialog = ft.AlertDialog(
+        modal=True,
+        title=ft.Text("Current Inventory"),
+        content=ft.Container(
+            content=ft.Column(
+                controls=[
+                    inventory_table
+                ],
+                scroll=ft.ScrollMode.AUTO,
+                expand=True
+            ),
+            height=500,
+            width=900
+        ),
+        actions=[
+            close_inventory_table_button
+        ]
+    )
+
+    open_inventory_table_button = ft.Button(
+        content="Current Inventory",
+        on_click=lambda e: show_inventory_table(
+            page,
+            inventory_table_dialog
+        )
+    )
+
     # -------------------------
     # Main page
     # -------------------------
@@ -369,7 +520,8 @@ def main(page: ft.Page):
         ft.Row(
             controls=[
                 open_add_item_button,
-                open_inventory_button
+                open_inventory_button,
+                open_inventory_table_button
             ]
         ),
 
