@@ -21,6 +21,15 @@ from database import (
     delete_inventory_record
 )
 
+# Constant
+COLOUR_TEXT = "#D9D9DA"
+COLOUR_CARD_BG = "#797878"
+COLOUR_BORDER = "#FFFFFF"
+COLOUR_XLSX_CELL = "FFFFFF"
+COLOUR_SAVE_FAIL = "#F20A0A"
+COLOUR_SAVE_SUCCESS = "#48F20A"
+COLOUR_DIVIDER = "#FFFFFF"
+
 
 # -------------------------
 # Functions
@@ -36,41 +45,60 @@ def load_items(
 
     rows = get_items()
 
+    if not rows:
+        items_list.controls.append(
+            ft.Text(
+                "No items yet — add one to get started.",
+                italic=True,
+                color=COLOUR_TEXT
+            )
+        )
+
     for item_id, name, unit in rows:
         items_list.controls.append(
-            ft.Row(
-                controls=[
-                    ft.Text(f"{item_id} — {name} ({unit})", expand=True),
-                    ft.IconButton(
-                        icon=ft.Icons.EDIT,
-                        tooltip="Edit item",
-                        on_click=lambda e, iid=item_id, nm=name, un=unit: (
-                            open_edit_item_dialog(
-                                page,
-                                iid,
-                                nm,
-                                un,
-                                items_list,
-                                inventory_item,
-                                inventory_list
+            ft.Container(
+                content=ft.Row(
+                    controls=[
+                        ft.Text(f"{name} ({unit})", expand=True),
+                        ft.IconButton(
+                            icon=ft.Icons.EDIT,
+                            tooltip="Edit item",
+                            icon_size=18,
+                            on_click=lambda e, iid=item_id, nm=name, un=unit: (
+                                open_edit_item_dialog(
+                                    page,
+                                    iid,
+                                    nm,
+                                    un,
+                                    items_list,
+                                    inventory_item,
+                                    inventory_list
+                                )
+                            )
+                        ),
+                        ft.IconButton(
+                            icon=ft.Icons.DELETE,
+                            tooltip="Delete item",
+                            icon_size=18,
+                            on_click=lambda e, iid=item_id, nm=name: (
+                                open_delete_item_dialog(
+                                    page,
+                                    iid,
+                                    nm,
+                                    items_list,
+                                    inventory_item,
+                                    inventory_list
+                                )
                             )
                         )
-                    ),
-                    ft.IconButton(
-                        icon=ft.Icons.DELETE,
-                        tooltip="Delete item",
-                        on_click=lambda e, iid=item_id, nm=name: (
-                            open_delete_item_dialog(
-                                page,
-                                iid,
-                                nm,
-                                items_list,
-                                inventory_item,
-                                inventory_list
-                            )
-                        )
-                    )
-                ]
+                    ],
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN
+                ),
+                padding=ft.Padding.symmetric(vertical=2, horizontal=8),
+                border_radius=8,
+                border=ft.Border.only(
+                    bottom=ft.BorderSide(1, COLOUR_BORDER)
+                )
             )
         )
 
@@ -247,39 +275,66 @@ def load_inventory(page: ft.Page, inventory_list: ft.Column):
 
     rows = get_inventory()
 
+    if not rows:
+        inventory_list.controls.append(
+            ft.Text(
+                "No inventory recorded yet.",
+                italic=True,
+                color=COLOUR_TEXT
+            )
+        )
+
     for record_id, date, item_name, amount, unit in rows:
         inventory_list.controls.append(
-            ft.Row(
-                controls=[
-                    ft.Text(
-                        f"{date} — {item_name}: {amount} {unit}",
-                        expand=True
-                    ),
-                    ft.IconButton(
-                        icon=ft.Icons.EDIT,
-                        tooltip="Edit record",
-                        on_click=lambda e, rid=record_id, dt=date, amt=amount: (
-                            open_edit_inventory_dialog(
-                                page,
-                                rid,
-                                dt,
-                                amt,
-                                inventory_list
+            ft.Container(
+                content=ft.Row(
+                    controls=[
+                        ft.Column(
+                            controls=[
+                                ft.Text(item_name, weight=ft.FontWeight.W_500),
+                                ft.Text(
+                                    f"{date} — {amount} {unit}",
+                                    size=12,
+                                    color= COLOUR_TEXT
+                                )
+                            ],
+                            spacing=0,
+                            expand=True
+                        ),
+                        ft.IconButton(
+                            icon=ft.Icons.EDIT,
+                            tooltip="Edit record",
+                            icon_size=18,
+                            on_click=lambda e, rid=record_id, dt=date, amt=amount: (
+                                open_edit_inventory_dialog(
+                                    page,
+                                    rid,
+                                    dt,
+                                    amt,
+                                    inventory_list
+                                )
+                            )
+                        ),
+                        ft.IconButton(
+                            icon=ft.Icons.DELETE,
+                            tooltip="Delete record",
+                            icon_size=18,
+                            on_click=lambda e, rid=record_id: (
+                                open_delete_inventory_dialog(
+                                    page,
+                                    rid,
+                                    inventory_list
+                                )
                             )
                         )
-                    ),
-                    ft.IconButton(
-                        icon=ft.Icons.DELETE,
-                        tooltip="Delete record",
-                        on_click=lambda e, rid=record_id: (
-                            open_delete_inventory_dialog(
-                                page,
-                                rid,
-                                inventory_list
-                            )
-                        )
-                    )
-                ]
+                    ],
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN
+                ),
+                padding=ft.Padding.symmetric(vertical=2, horizontal=8),
+                border_radius=8,
+                border=ft.Border.only(
+                    bottom=ft.BorderSide(1, "#EEEEEE")
+                )
             )
         )
 
@@ -506,7 +561,7 @@ def get_inventory_table_data():
             )
 
             if amount is None:
-                row.append("No inventory data for this date")
+                row.append("No Data")
             else:
                 row.append(str(amount))
 
@@ -607,8 +662,8 @@ def export_inventory_xlsx(filename):
     for cell in sheet[1]:
         cell.font = Font(bold=True)
         cell.fill = PatternFill(
-            start_color="DDDDDD",
-            end_color="DDDDDD",
+            start_color=COLOUR_XLSX_CELL,
+            end_color=COLOUR_XLSX_CELL,
             fill_type="solid"
         )
 
@@ -657,7 +712,7 @@ def save_inventory(page: ft.Page, save_message: ft.Text, file_format: str):
 
     if not rows:
         save_message.value = "No inventory data to export."
-        save_message.color = "red"
+        save_message.color = COLOUR_SAVE_FAIL
         page.update()
         return
 
@@ -673,11 +728,11 @@ def save_inventory(page: ft.Page, save_message: ft.Text, file_format: str):
         EXPORTERS[file_format](str(filename))
 
         save_message.value = f"Saved to {filename}"
-        save_message.color = "green"
+        save_message.color = COLOUR_SAVE_SUCCESS
 
     except Exception as error:
         save_message.value = f"Save failed: {error}"
-        save_message.color = "red"
+        save_message.color = COLOUR_SAVE_FAIL
 
     page.update()
 
@@ -775,6 +830,7 @@ def main(page: ft.Page):
 
     open_add_item_button = ft.Button(
         content="Add Item",
+        icon=ft.Icons.ADD,
         on_click=lambda: page.show_dialog(add_item_dialog)
     )
 
@@ -883,6 +939,7 @@ def main(page: ft.Page):
 
     open_inventory_button = ft.Button(
         content="Inventory an Item",
+        icon=ft.Icons.PLAYLIST_ADD_CHECK,
         on_click=lambda: page.show_dialog(inventory_dialog)
     )
 
@@ -956,6 +1013,7 @@ def main(page: ft.Page):
 
     open_inventory_table_button = ft.Button(
         content="Current Inventory",
+        icon=ft.Icons.TABLE_CHART,
         on_click=lambda e: show_inventory_table(
             page,
             inventory_table_dialog
@@ -966,48 +1024,100 @@ def main(page: ft.Page):
     # Main page
     # -------------------------
 
-    page.add(
-        ft.Text(
-            "Kitchen Inventory",
-            size=24
-        ),
+    page.padding = 24
 
-        ft.Row(
+    items_card = ft.Container(
+        content=ft.Column(
             controls=[
-                open_add_item_button,
-                open_inventory_button,
-                open_inventory_table_button
-            ]
-        ),
-
-        ft.Divider(),
-
-        ft.Row(
-            controls=[
-                ft.Column(
+                ft.Row(
                     controls=[
-                        ft.Text(
-                            "Items",
-                            size=20
-                        ),
-                        items_list
+                        ft.Icon(ft.Icons.SHOPPING_BASKET_OUTLINED, size=20),
+                        ft.Text("Items", size=18, weight=ft.FontWeight.BOLD)
                     ],
-                    expand=True
+                    spacing=8
                 ),
+                ft.Divider(height=1, color=COLOUR_DIVIDER),
+                items_list
+            ],
+            spacing=12,
+            expand=True
+        ),
+        padding=16,
+        border_radius=12,
+        border=ft.Border.all(1, COLOUR_BORDER),
+        bgcolor=COLOUR_CARD_BG,
+        expand=True
+    )
 
-                ft.VerticalDivider(),
-
-                ft.Column(
+    inventory_card = ft.Container(
+        content=ft.Column(
+            controls=[
+                ft.Row(
                     controls=[
+                        ft.Icon(ft.Icons.HISTORY, size=20),
                         ft.Text(
                             "Inventory History",
-                            size=20
-                        ),
-                        inventory_list
+                            size=18,
+                            weight=ft.FontWeight.BOLD
+                        )
                     ],
+                    spacing=8
+                ),
+                ft.Divider(height=1, color=COLOUR_DIVIDER),
+                inventory_list
+            ],
+            spacing=12,
+            expand=True
+        ),
+        padding=16,
+        border_radius=12,
+        border=ft.Border.all(1, COLOUR_BORDER),
+        bgcolor=COLOUR_CARD_BG,
+        expand=True
+    )
+
+    page.add(
+        ft.Column(
+            controls=[
+                ft.Row(
+                    controls=[
+                        ft.Icon(ft.Icons.KITCHEN, size=32),
+                        ft.Column(
+                            controls=[
+                                ft.Text(
+                                    "Kitchen Inventory",
+                                    size=26,
+                                    weight=ft.FontWeight.BOLD
+                                ),
+                                ft.Text(
+                                    "Track what's in stock and keep a "
+                                    "history over time",
+                                    size=13,
+                                    color=COLOUR_TEXT
+                                )
+                            ],
+                            spacing=0
+                        )
+                    ],
+                    spacing=12
+                ),
+
+                ft.Row(
+                    controls=[
+                        open_add_item_button,
+                        open_inventory_button,
+                        open_inventory_table_button
+                    ],
+                    spacing=12
+                ),
+
+                ft.Row(
+                    controls=[items_card, inventory_card],
+                    spacing=20,
                     expand=True
                 )
             ],
+            spacing=20,
             expand=True
         )
     )
