@@ -219,3 +219,8 @@ __marimo__/
 
 # databases
 *.db
+
+# exported files
+*.csv
+*.xlsx
+*.pdf
