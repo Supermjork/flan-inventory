@@ -416,9 +416,16 @@ def main(page: ft.Page):
 
     page.window.width = 1000
     page.window.height = 850
+    page.update()
 
-    items_list = ft.Column()
-    inventory_list = ft.Column()
+    items_list = ft.Column(
+        scroll=ft.ScrollMode.AUTO,
+        expand=True
+    )
+    inventory_list = ft.Column(
+        scroll=ft.ScrollMode.AUTO,
+        expand=True
+    )
 
     message = ft.Text()
     inventory_message = ft.Text()
@@ -653,7 +660,10 @@ def main(page: ft.Page):
                     close_inventory_table_button
                 ],
                 alignment=ft.MainAxisAlignment.END,
-                spacing=10
+                spacing=10,
+                run_spacing=10,
+                wrap=True,
+                width=860
             )
         ]
     )
