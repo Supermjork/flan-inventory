@@ -507,12 +507,25 @@ def add_inventory_record(
 
     page.pop_dialog()
 
-def get_inventory_table_data():
+def get_inventory_table_data(start_date=None, end_date=None, item_ids=None):
     items = get_items()
-    inventory = get_inventory()
 
-    if not inventory:
+    if item_ids is not None:
+        items = [item for item in items if item[0] in item_ids]
+
+    if not items:
         return [], []
+
+    item_names = {name for _, name, _ in items}
+
+    inventory = get_inventory()
+    inventory = [record for record in inventory if record[2] in item_names]
+
+    if start_date:
+        inventory = [record for record in inventory if record[1] >= start_date]
+
+    if end_date:
+        inventory = [record for record in inventory if record[1] <= end_date]
 
     # Create a lookup:
     # (date, item_id) -> amount
@@ -524,25 +537,21 @@ def get_inventory_table_data():
                 inventory_lookup[(date, item_id)] = amount
                 break
 
-    # Get all dates in the inventory records
-    dates = sorted(
-        set(date for _, date, _, _, _ in inventory)
-    )
+    # Determine the date range to render
+    if start_date and end_date:
+        range_start = datetime.strptime(start_date, "%Y-%m-%d")
+        range_end = datetime.strptime(end_date, "%Y-%m-%d")
+    elif inventory:
+        dates = sorted(set(record[1] for record in inventory))
+        range_start = datetime.strptime(dates[0], "%Y-%m-%d")
+        range_end = datetime.strptime(dates[-1], "%Y-%m-%d")
+    else:
+        return items, []
 
-    # Create a continuous date range
-    start_date = datetime.strptime(
-        dates[0],
-        "%Y-%m-%d"
-    )
-    end_date = datetime.strptime(
-        dates[-1],
-        "%Y-%m-%d"
-    )
-
-    current_date = start_date
+    current_date = range_start
     all_dates = []
 
-    while current_date <= end_date:
+    while current_date <= range_end:
         all_dates.append(
             current_date.strftime("%Y-%m-%d")
         )
@@ -569,8 +578,8 @@ def get_inventory_table_data():
 
     return items, rows
 
-def build_inventory_table():
-    items, rows = get_inventory_table_data()
+def build_inventory_table(start_date=None, end_date=None, item_ids=None):
+    items, rows = get_inventory_table_data(start_date, end_date, item_ids)
 
     columns = [
         fdt.DataColumn2(
@@ -616,11 +625,190 @@ def build_inventory_table():
     )
 
 def show_inventory_table(page: ft.Page, inventory_table_dialog: ft.AlertDialog):
-    inventory_table_dialog.content = ft.Container(
+    filters = {"start_date": None, "end_date": None, "item_ids": None}
+
+    save_message = ft.Text()
+
+    table_container = ft.Container(
         content=build_inventory_table(),
-        height=500,
+        height=400,
         width=900
     )
+
+    def rebuild_table():
+        table_container.content = build_inventory_table(
+            filters["start_date"],
+            filters["end_date"],
+            filters["item_ids"]
+        )
+
+    start_field = ft.TextField(
+        label="From",
+        width=150,
+        read_only=True,
+        suffix_icon=ft.Icons.CALENDAR_MONTH,
+        on_click=lambda e: page.show_dialog(start_picker)
+    )
+
+    end_field = ft.TextField(
+        label="To",
+        width=150,
+        read_only=True,
+        suffix_icon=ft.Icons.CALENDAR_MONTH,
+        on_click=lambda e: page.show_dialog(end_picker)
+    )
+
+    def on_start_change(e):
+        start_field.value = e.control.value.strftime("%Y-%m-%d")
+        start_field.update()
+
+    def on_end_change(e):
+        end_field.value = e.control.value.strftime("%Y-%m-%d")
+        end_field.update()
+
+    recorded_dates = [record[1] for record in get_inventory()]
+
+    if recorded_dates:
+        earliest_date = datetime.strptime(min(recorded_dates), "%Y-%m-%d")
+        latest_date = datetime.strptime(max(recorded_dates), "%Y-%m-%d")
+    else:
+        earliest_date = datetime.now()
+        latest_date = datetime.now()
+
+    start_picker = ft.DatePicker(
+        first_date=earliest_date,
+        last_date=latest_date,
+        on_change=on_start_change
+    )
+
+    end_picker = ft.DatePicker(
+        first_date=earliest_date,
+        last_date=latest_date,
+        on_change=on_end_change
+    )
+
+    item_checkboxes = {}
+    checkbox_controls = []
+
+    for item_id, name, unit in get_items():
+        checkbox = ft.Checkbox(label=f"{name} ({unit})", value=True)
+        item_checkboxes[item_id] = checkbox
+        checkbox_controls.append(checkbox)
+
+    items_filter_column = ft.Column(
+        controls=checkbox_controls,
+        scroll=ft.ScrollMode.AUTO,
+        height=100,
+        spacing=0
+    )
+
+    def apply_filters(e):
+        filters["start_date"] = start_field.value.strip() or None
+        filters["end_date"] = end_field.value.strip() or None
+
+        selected = [
+            item_id
+            for item_id, checkbox in item_checkboxes.items()
+            if checkbox.value
+        ]
+        filters["item_ids"] = (
+            selected if len(selected) < len(item_checkboxes) else None
+        )
+
+        rebuild_table()
+        page.update()
+
+    def clear_filters(e):
+        start_field.value = ""
+        end_field.value = ""
+
+        for checkbox in item_checkboxes.values():
+            checkbox.value = True
+
+        filters["start_date"] = None
+        filters["end_date"] = None
+        filters["item_ids"] = None
+
+        rebuild_table()
+        page.update()
+
+    export_csv_button = ft.Button(
+        content="Export CSV",
+        on_click=lambda e: save_inventory(
+            page, save_message, "csv",
+            filters["start_date"], filters["end_date"], filters["item_ids"]
+        )
+    )
+
+    export_xlsx_button = ft.Button(
+        content="Export XLSX",
+        on_click=lambda e: save_inventory(
+            page, save_message, "xlsx",
+            filters["start_date"], filters["end_date"], filters["item_ids"]
+        )
+    )
+
+    export_pdf_button = ft.Button(
+        content="Export PDF",
+        on_click=lambda e: save_inventory(
+            page, save_message, "pdf",
+            filters["start_date"], filters["end_date"], filters["item_ids"]
+        )
+    )
+
+    close_button = ft.Button(
+        content="Close",
+        on_click=lambda e: page.pop_dialog()
+    )
+
+    inventory_table_dialog.content = ft.Container(
+        content=ft.Column(
+            controls=[
+                ft.Row(
+                    controls=[
+                        start_field,
+                        end_field,
+                        ft.Button(
+                            content="Apply Filters",
+                            on_click=apply_filters
+                        ),
+                        ft.Button(
+                            content="Clear Filters",
+                            on_click=clear_filters
+                        )
+                    ],
+                    spacing=10,
+                    wrap=True
+                ),
+                ft.Text("Filter Items", size=12, color=COLOUR_TEXT),
+                items_filter_column,
+                ft.Divider(height=1, color=COLOUR_DIVIDER),
+                table_container
+            ],
+            spacing=10,
+            scroll=ft.ScrollMode.AUTO,
+            expand=True
+        ),
+        height=600,
+        width=900
+    )
+
+    inventory_table_dialog.actions = [
+        ft.Row(
+            controls=[
+                save_message,
+                export_csv_button,
+                export_xlsx_button,
+                export_pdf_button,
+                close_button
+            ],
+            alignment=ft.MainAxisAlignment.END,
+            spacing=10,
+            run_spacing=10,
+            wrap=True,
+            width=860
+        )
+    ]
 
     page.show_dialog(inventory_table_dialog)
 
@@ -632,8 +820,8 @@ def get_inventory_table_headers(items):
 
     return headers
 
-def export_inventory_csv(filename):
-    items, rows = get_inventory_table_data()
+def export_inventory_csv(filename, start_date=None, end_date=None, item_ids=None):
+    items, rows = get_inventory_table_data(start_date, end_date, item_ids)
     headers = get_inventory_table_headers(items)
 
     with open(
@@ -649,8 +837,8 @@ def export_inventory_csv(filename):
         for row in rows:
             writer.writerow(row)
 
-def export_inventory_xlsx(filename):
-    items, rows = get_inventory_table_data()
+def export_inventory_xlsx(filename, start_date=None, end_date=None, item_ids=None):
+    items, rows = get_inventory_table_data(start_date, end_date, item_ids)
     headers = get_inventory_table_headers(items)
 
     workbook = Workbook()
@@ -680,8 +868,8 @@ def export_inventory_xlsx(filename):
 
     workbook.save(filename)
 
-def export_inventory_pdf(filename):
-    items, rows = get_inventory_table_data()
+def export_inventory_pdf(filename, start_date=None, end_date=None, item_ids=None):
+    items, rows = get_inventory_table_data(start_date, end_date, item_ids)
     headers = get_inventory_table_headers(items)
 
     styles = getSampleStyleSheet()
@@ -707,8 +895,15 @@ EXPORTERS = {
     "pdf": export_inventory_pdf,
 }
 
-def save_inventory(page: ft.Page, save_message: ft.Text, file_format: str):
-    items, rows = get_inventory_table_data()
+def save_inventory(
+    page: ft.Page,
+    save_message: ft.Text,
+    file_format: str,
+    start_date=None,
+    end_date=None,
+    item_ids=None
+):
+    items, rows = get_inventory_table_data(start_date, end_date, item_ids)
 
     if not rows:
         save_message.value = "No inventory data to export."
@@ -725,7 +920,7 @@ def save_inventory(page: ft.Page, save_message: ft.Text, file_format: str):
             f".{file_format}"
         )
 
-        EXPORTERS[file_format](str(filename))
+        EXPORTERS[file_format](str(filename), start_date, end_date, item_ids)
 
         save_message.value = f"Saved to {filename}"
         save_message.color = COLOUR_SAVE_SUCCESS
@@ -943,72 +1138,9 @@ def main(page: ft.Page):
         on_click=lambda: page.show_dialog(inventory_dialog)
     )
 
-    inventory_table = build_inventory_table()
-
-    save_message = ft.Text()
-
-    export_csv_button = ft.Button(
-        content="Export CSV",
-        on_click=lambda e: save_inventory(
-            page,
-            save_message,
-            "csv"
-        )
-    )
-
-    export_xlsx_button = ft.Button(
-        content="Export XLSX",
-        on_click=lambda e: save_inventory(
-            page,
-            save_message,
-            "xlsx"
-        )
-    )
-
-    export_pdf_button = ft.Button(
-        content="Export PDF",
-        on_click=lambda e: save_inventory(
-            page,
-            save_message,
-            "pdf"
-        )
-    )
-
-    close_inventory_table_button = ft.Button(
-        content="Close",
-        on_click=lambda e: page.pop_dialog()
-    )
-
     inventory_table_dialog = ft.AlertDialog(
         modal=True,
-        title=ft.Text("Current Inventory"),
-        content=ft.Container(
-            content=ft.Column(
-                controls=[
-                    inventory_table
-                ],
-                scroll=ft.ScrollMode.AUTO,
-                expand=True
-            ),
-            height=500,
-            width=900
-        ),
-        actions=[
-            ft.Row(
-                controls=[
-                    save_message,
-                    export_csv_button,
-                    export_xlsx_button,
-                    export_pdf_button,
-                    close_inventory_table_button
-                ],
-                alignment=ft.MainAxisAlignment.END,
-                spacing=10,
-                run_spacing=10,
-                wrap=True,
-                width=860
-            )
-        ]
+        title=ft.Text("Current Inventory")
     )
 
     open_inventory_table_button = ft.Button(
