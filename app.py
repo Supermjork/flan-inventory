@@ -31,6 +31,16 @@ COLOUR_SAVE_SUCCESS = "#48F20A"
 COLOUR_DIVIDER = "#FFFFFF"
 
 
+def picked_date_str(value):
+    """
+    Flet's DatePicker currently returns a date one day earlier than what
+    was actually clicked (a known upstream UTC conversion bug —
+    https://github.com/flet-dev/flet/issues/6145). Bump it back by a day
+    until that's fixed upstream.
+    """
+    return (value + timedelta(days=1)).strftime("%Y-%m-%d")
+
+
 # -------------------------
 # Functions
 # -------------------------
@@ -359,7 +369,7 @@ def open_edit_inventory_dialog(
     )
 
     def on_date_change(e):
-        date_field.value = e.control.value.strftime("%Y-%m-%d")
+        date_field.value = picked_date_str(e.control.value)
         date_field.update()
 
     date_picker = ft.DatePicker(
@@ -659,11 +669,11 @@ def show_inventory_table(page: ft.Page, inventory_table_dialog: ft.AlertDialog):
     )
 
     def on_start_change(e):
-        start_field.value = e.control.value.strftime("%Y-%m-%d")
+        start_field.value = picked_date_str(e.control.value)
         start_field.update()
 
     def on_end_change(e):
-        end_field.value = e.control.value.strftime("%Y-%m-%d")
+        end_field.value = picked_date_str(e.control.value)
         end_field.update()
 
     recorded_dates = [record[1] for record in get_inventory()]
@@ -1053,7 +1063,7 @@ def main(page: ft.Page):
     )
 
     def on_inventory_date_change(e):
-        inventory_date.value = e.control.value.strftime("%Y-%m-%d")
+        inventory_date.value = picked_date_str(e.control.value)
         inventory_date.update()
 
     inventory_date_picker = ft.DatePicker(
