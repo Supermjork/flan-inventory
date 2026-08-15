@@ -305,7 +305,7 @@ def load_inventory(page: ft.Page, inventory_list: ft.Column):
             )
         )
 
-    for record_id, date, item_name, amount, unit in rows:
+    for record_id, date, item_id, item_name, amount, unit in rows:
         inventory_list.controls.append(
             ft.Container(
                 content=ft.Row(
@@ -537,10 +537,12 @@ def get_inventory_table_data(start_date=None, end_date=None, item_ids=None):
     if not items:
         return [], []
 
-    item_names = {name for _, name, _ in items}
+    selected_item_ids = {item_id for item_id, name, unit in items}
 
     inventory = get_inventory()
-    inventory = [record for record in inventory if record[2] in item_names]
+    inventory = [
+        record for record in inventory if record[2] in selected_item_ids
+    ]
 
     if start_date:
         inventory = [record for record in inventory if record[1] >= start_date]
@@ -550,13 +552,10 @@ def get_inventory_table_data(start_date=None, end_date=None, item_ids=None):
 
     # Create a lookup:
     # (date, item_id) -> amount
-    inventory_lookup = {}
-
-    for record_id, date, item_name, amount, unit in inventory:
-        for item_id, name, item_unit in items:
-            if name == item_name:
-                inventory_lookup[(date, item_id)] = amount
-                break
+    inventory_lookup = {
+        (date, item_id): amount
+        for record_id, date, item_id, item_name, amount, unit in inventory
+    }
 
     # Determine the date range to render
     if start_date and end_date:

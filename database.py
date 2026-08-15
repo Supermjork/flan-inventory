@@ -93,8 +93,8 @@ def add_inventory(date, item_id, amount, unit):
 
 def get_inventory():
     return db.execute("""
-        SELECT inventory.id, inventory.date, items.name,
-               inventory.amount, inventory.unit
+        SELECT inventory.id, inventory.date, inventory.item_id,
+               items.name, inventory.amount, inventory.unit
         FROM inventory
         JOIN items ON inventory.item_id = items.id
         ORDER BY inventory.date, inventory.item_id
