@@ -1003,12 +1003,6 @@ def open_settings_dialog(page: ft.Page):
     height_field = ft.TextField(
         label="Window Height", value=str(WINDOW["height"]), width=160
     )
-    min_width_field = ft.TextField(
-        label="Min Width", value=str(WINDOW["min_width"]), width=160
-    )
-    min_height_field = ft.TextField(
-        label="Min Height", value=str(WINDOW["min_height"]), width=160
-    )
 
     message = ft.Text()
 
@@ -1033,11 +1027,12 @@ def open_settings_dialog(page: ft.Page):
             new_window = {
                 "width": int(width_field.value.strip()),
                 "height": int(height_field.value.strip()),
-                "min_width": int(min_width_field.value.strip()),
-                "min_height": int(min_height_field.value.strip())
+                # Min size is fixed and not user-editable
+                "min_width": WINDOW["min_width"],
+                "min_height": WINDOW["min_height"]
             }
 
-            if any(value <= 0 for value in new_window.values()):
+            if new_window["width"] <= 0 or new_window["height"] <= 0:
                 raise ValueError
 
         except ValueError:
@@ -1068,10 +1063,6 @@ def open_settings_dialog(page: ft.Page):
                     ),
                     ft.Row(
                         controls=[width_field, height_field], spacing=10
-                    ),
-                    ft.Row(
-                        controls=[min_width_field, min_height_field],
-                        spacing=10
                     ),
                     message
                 ],
