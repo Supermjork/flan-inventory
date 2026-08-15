@@ -1,6 +1,7 @@
 import flet as ft
 import flet_datatable2 as fdt
 import csv
+import re
 from pathlib import Path
 from datetime import datetime, timedelta
 from openpyxl import Workbook
@@ -20,7 +21,7 @@ from database import (
     update_inventory_record,
     delete_inventory_record
 )
-from config import THEME, WINDOW
+from config import THEME, WINDOW, save_config
 
 # Theme (see config.json to customize)
 COLOUR_TEXT = THEME["text"]
@@ -32,6 +33,13 @@ COLOUR_XLSX_CELL = THEME["xlsx_header_bg"]
 COLOUR_PDF_HEADER_BG = THEME["pdf_header_bg"]
 COLOUR_SAVE_FAIL = THEME["save_fail"]
 COLOUR_SAVE_SUCCESS = THEME["save_success"]
+
+
+HEX_COLOR_RE = re.compile(r"^#?[0-9A-Fa-f]{6}$")
+
+
+def is_valid_hex_color(value):
+    return bool(HEX_COLOR_RE.match(value.strip()))
 
 
 def picked_date_str(value):
@@ -944,6 +952,149 @@ def save_inventory(
 
     page.update()
 
+def open_settings_dialog(page: ft.Page):
+    theme_fields = {}
+
+    def make_color_row(label, key):
+        current_value = THEME[key]
+
+        swatch = ft.Container(
+            width=24,
+            height=24,
+            border_radius=4,
+            bgcolor=(
+                current_value
+                if current_value.startswith("#")
+                else f"#{current_value}"
+            ),
+            border=ft.Border.all(1, COLOUR_BORDER)
+        )
+
+        def on_change(e, sw=swatch):
+            value = e.control.value.strip()
+            if is_valid_hex_color(value):
+                sw.bgcolor = value if value.startswith("#") else f"#{value}"
+                sw.update()
+
+        field = ft.TextField(
+            label=label,
+            value=current_value,
+            width=160,
+            on_change=on_change
+        )
+        theme_fields[key] = field
+
+        return ft.Row(controls=[swatch, field], spacing=10)
+
+    color_rows = [
+        make_color_row("Text", "text"),
+        make_color_row("Card Background", "card_bg"),
+        make_color_row("Border", "border"),
+        make_color_row("Divider", "divider"),
+        make_color_row("Row Separator", "row_separator"),
+        make_color_row("XLSX Header BG", "xlsx_header_bg"),
+        make_color_row("PDF Header BG", "pdf_header_bg"),
+        make_color_row("Save Success", "save_success"),
+        make_color_row("Save Fail", "save_fail")
+    ]
+
+    width_field = ft.TextField(
+        label="Window Width", value=str(WINDOW["width"]), width=160
+    )
+    height_field = ft.TextField(
+        label="Window Height", value=str(WINDOW["height"]), width=160
+    )
+    min_width_field = ft.TextField(
+        label="Min Width", value=str(WINDOW["min_width"]), width=160
+    )
+    min_height_field = ft.TextField(
+        label="Min Height", value=str(WINDOW["min_height"]), width=160
+    )
+
+    message = ft.Text()
+
+    def save(e):
+        new_theme = {}
+
+        for key, field in theme_fields.items():
+            value = field.value.strip()
+
+            if not is_valid_hex_color(value):
+                message.value = f"Invalid color for {key}: {value}"
+                message.color = COLOUR_SAVE_FAIL
+                page.update()
+                return
+
+            new_theme[key] = value
+
+        # openpyxl fill colors must not have a leading '#'
+        new_theme["xlsx_header_bg"] = new_theme["xlsx_header_bg"].lstrip("#")
+
+        try:
+            new_window = {
+                "width": int(width_field.value.strip()),
+                "height": int(height_field.value.strip()),
+                "min_width": int(min_width_field.value.strip()),
+                "min_height": int(min_height_field.value.strip())
+            }
+
+            if any(value <= 0 for value in new_window.values()):
+                raise ValueError
+
+        except ValueError:
+            message.value = "Window sizes must be positive whole numbers."
+            message.color = COLOUR_SAVE_FAIL
+            page.update()
+            return
+
+        save_config({"theme": new_theme, "window": new_window})
+
+        message.value = "Saved — restart the app to apply changes."
+        message.color = COLOUR_SAVE_SUCCESS
+        page.update()
+
+    page.show_dialog(
+        ft.AlertDialog(
+            modal=True,
+            title=ft.Text("Settings"),
+            content=ft.Column(
+                controls=[
+                    ft.Text(
+                        "Theme Colors", size=14, weight=ft.FontWeight.BOLD
+                    ),
+                    *color_rows,
+                    ft.Divider(height=1, color=COLOUR_DIVIDER),
+                    ft.Text(
+                        "Window Size", size=14, weight=ft.FontWeight.BOLD
+                    ),
+                    ft.Row(
+                        controls=[width_field, height_field], spacing=10
+                    ),
+                    ft.Row(
+                        controls=[min_width_field, min_height_field],
+                        spacing=10
+                    ),
+                    message
+                ],
+                spacing=12,
+                scroll=ft.ScrollMode.AUTO,
+                width=380,
+                height=500
+            ),
+            actions=[
+                ft.Button(
+                    content="Close",
+                    on_click=lambda e: page.pop_dialog()
+                ),
+                ft.Button(
+                    content="Save",
+                    on_click=save
+                )
+            ],
+            actions_alignment=ft.MainAxisAlignment.END
+        )
+    )
+
 def main(page: ft.Page):
     page.title = "Kitchen Inventory"
 
@@ -1251,7 +1402,12 @@ def main(page: ft.Page):
                     controls=[
                         open_add_item_button,
                         open_inventory_button,
-                        open_inventory_table_button
+                        open_inventory_table_button,
+                        ft.Button(
+                            content="Settings",
+                            icon=ft.Icons.SETTINGS,
+                            on_click=lambda e: open_settings_dialog(page)
+                        )
                     ],
                     spacing=12
                 ),
