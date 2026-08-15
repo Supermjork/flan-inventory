@@ -224,3 +224,6 @@ __marimo__/
 *.csv
 *.xlsx
 *.pdf
+
+# Config
+*.json

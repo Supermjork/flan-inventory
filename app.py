@@ -20,15 +20,18 @@ from database import (
     update_inventory_record,
     delete_inventory_record
 )
+from config import THEME, WINDOW
 
-# Constant
-COLOUR_TEXT = "#D9D9DA"
-COLOUR_CARD_BG = "#797878"
-COLOUR_BORDER = "#FFFFFF"
-COLOUR_XLSX_CELL = "FFFFFF"
-COLOUR_SAVE_FAIL = "#F20A0A"
-COLOUR_SAVE_SUCCESS = "#48F20A"
-COLOUR_DIVIDER = "#FFFFFF"
+# Theme (see config.json to customize)
+COLOUR_TEXT = THEME["text"]
+COLOUR_CARD_BG = THEME["card_bg"]
+COLOUR_BORDER = THEME["border"]
+COLOUR_DIVIDER = THEME["divider"]
+COLOUR_ROW_SEPARATOR = THEME["row_separator"]
+COLOUR_XLSX_CELL = THEME["xlsx_header_bg"]
+COLOUR_PDF_HEADER_BG = THEME["pdf_header_bg"]
+COLOUR_SAVE_FAIL = THEME["save_fail"]
+COLOUR_SAVE_SUCCESS = THEME["save_success"]
 
 
 def picked_date_str(value):
@@ -343,7 +346,7 @@ def load_inventory(page: ft.Page, inventory_list: ft.Column):
                 padding=ft.Padding.symmetric(vertical=2, horizontal=8),
                 border_radius=8,
                 border=ft.Border.only(
-                    bottom=ft.BorderSide(1, "#EEEEEE")
+                    bottom=ft.BorderSide(1, COLOUR_ROW_SEPARATOR)
                 )
             )
         )
@@ -888,7 +891,7 @@ def export_inventory_pdf(filename, start_date=None, end_date=None, item_ids=None
     table = Table([headers] + rows, repeatRows=1)
     table.setStyle(
         TableStyle([
-            ("BACKGROUND", (0, 0), (-1, 0), pdf_colors.HexColor("#DDDDDD")),
+            ("BACKGROUND", (0, 0), (-1, 0), pdf_colors.HexColor(COLOUR_PDF_HEADER_BG)),
             ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
             ("GRID", (0, 0), (-1, -1), 0.5, pdf_colors.grey),
             ("FONTSIZE", (0, 0), (-1, -1), 8),
@@ -944,11 +947,11 @@ def save_inventory(
 def main(page: ft.Page):
     page.title = "Kitchen Inventory"
 
-    page.window.min_width = 800
-    page.window.min_height = 800
+    page.window.min_width = WINDOW["min_width"]
+    page.window.min_height = WINDOW["min_height"]
 
-    page.window.width = 1000
-    page.window.height = 850
+    page.window.width = WINDOW["width"]
+    page.window.height = WINDOW["height"]
     page.update()
 
     items_list = ft.Column(
