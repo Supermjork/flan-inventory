@@ -1,5 +1,6 @@
 import flet as ft
 import flet_datatable2 as fdt
+import flet_charts as fch
 import csv
 import re
 from pathlib import Path
@@ -1085,6 +1086,232 @@ def open_settings_dialog(page: ft.Page):
         )
     )
 
+TREND_PALETTE = [
+    "#4C9AFF", "#F2994A", "#27AE60", "#EB5757",
+    "#9B51E0", "#2D9CDB", "#F2C94C", "#56CCF2"
+]
+MAX_TREND_ITEMS = 6
+
+def open_trends_dialog(page: ft.Page):
+    chart_container = ft.Container(height=380, width=850)
+    message = ft.Text()
+
+    item_checkboxes = {}
+    checkbox_controls = []
+
+    for item_id, name, unit in get_items():
+        checkbox = ft.Checkbox(label=f"{name} ({unit})", value=False)
+        item_checkboxes[item_id] = checkbox
+        checkbox_controls.append(checkbox)
+
+    def build_chart(e):
+        selected = [
+            (item_id, checkbox.label)
+            for item_id, checkbox in item_checkboxes.items()
+            if checkbox.value
+        ]
+
+        if not selected:
+            message.value = "Select at least one item to see its trend."
+            message.color = COLOUR_SAVE_FAIL
+            chart_container.content = None
+            page.update()
+            return
+
+        if len(selected) > MAX_TREND_ITEMS:
+            message.value = (
+                f"Pick {MAX_TREND_ITEMS} or fewer items for a "
+                "readable chart."
+            )
+            message.color = COLOUR_SAVE_FAIL
+            chart_container.content = None
+            page.update()
+            return
+
+        inventory = get_inventory()
+
+        data_series = []
+        legend_items = []
+        min_x = None
+        max_x = None
+        max_y = 0.0
+
+        for index, (item_id, label) in enumerate(selected):
+            records = sorted(
+                (record for record in inventory if record[2] == item_id),
+                key=lambda record: record[1]
+            )
+
+            if not records:
+                continue
+
+            points = []
+
+            for record_id, date, rec_item_id, name, amount, unit in records:
+                x_value = datetime.strptime(date, "%Y-%m-%d").toordinal()
+
+                points.append(
+                    fch.LineChartDataPoint(
+                        x_value,
+                        amount,
+                        tooltip=f"{date}: {amount} {unit}"
+                    )
+                )
+
+                min_x = x_value if min_x is None else min(min_x, x_value)
+                max_x = x_value if max_x is None else max(max_x, x_value)
+                max_y = max(max_y, amount)
+
+            color = TREND_PALETTE[index % len(TREND_PALETTE)]
+
+            data_series.append(
+                fch.LineChartData(
+                    points=points,
+                    color=color,
+                    curved=True,
+                    stroke_width=3,
+                    point=fch.ChartCirclePoint(
+                        radius=4,
+                        color=color,
+                        stroke_color=COLOUR_CARD_BG,
+                        stroke_width=1
+                    )
+                )
+            )
+
+            legend_items.append(
+                ft.Row(
+                    controls=[
+                        ft.Container(
+                            width=12,
+                            height=12,
+                            bgcolor=color,
+                            border_radius=3
+                        ),
+                        ft.Text(label, size=12, color=COLOUR_TEXT)
+                    ],
+                    spacing=6
+                )
+            )
+
+        if not data_series:
+            message.value = (
+                "No inventory data recorded for the selected items."
+            )
+            message.color = COLOUR_SAVE_FAIL
+            chart_container.content = None
+            page.update()
+            return
+
+        message.value = ""
+
+        y_max = max_y * 1.1 if max_y > 0 else 1
+        y_interval = y_max / 4
+
+        if max_x is not None and max_x > min_x:
+            x_interval = (max_x - min_x) / 4
+        else:
+            x_interval = 1
+
+        bottom_labels = [
+            fch.ChartAxisLabel(
+                value=min_x + (i * x_interval),
+                label=ft.Text(
+                    datetime.fromordinal(
+                        int(round(min_x + (i * x_interval)))
+                    ).strftime("%b %d"),
+                    size=10,
+                    color=COLOUR_TEXT
+                )
+            )
+            for i in range(5)
+        ]
+
+        chart = fch.LineChart(
+            data_series=data_series,
+            min_x=min_x,
+            max_x=max_x,
+            min_y=0,
+            max_y=y_max,
+            width=850,
+            height=330,
+            border=ft.Border.all(1, COLOUR_BORDER),
+            horizontal_grid_lines=fch.ChartGridLines(
+                interval=y_interval, color=COLOUR_DIVIDER, width=1
+            ),
+            vertical_grid_lines=fch.ChartGridLines(
+                interval=x_interval, color=COLOUR_DIVIDER, width=1
+            ),
+            left_axis=fch.ChartAxis(
+                label_size=44,
+                title=ft.Text("Amount", size=12, color=COLOUR_TEXT),
+                title_size=20
+            ),
+            bottom_axis=fch.ChartAxis(
+                labels=bottom_labels,
+                label_size=32,
+                title=ft.Text("Date", size=12, color=COLOUR_TEXT),
+                title_size=20
+            ),
+            tooltip=fch.LineChartTooltip(
+                bgcolor="#0D0D0D",
+                border_radius=8,
+                border_side=ft.BorderSide(1, COLOUR_BORDER)
+            )
+        )
+
+        chart_container.content = ft.Column(
+            controls=[
+                chart,
+                ft.Row(controls=legend_items, wrap=True, spacing=15)
+            ],
+            spacing=10
+        )
+
+        page.update()
+
+    items_checkbox_column = ft.Column(
+        controls=checkbox_controls,
+        scroll=ft.ScrollMode.AUTO,
+        height=100,
+        spacing=0
+    )
+
+    page.show_dialog(
+        ft.AlertDialog(
+            modal=True,
+            title=ft.Text("Inventory Trends"),
+            content=ft.Container(
+                content=ft.Column(
+                    controls=[
+                        ft.Text(
+                            "Select items to compare",
+                            size=12,
+                            color=COLOUR_TEXT
+                        ),
+                        items_checkbox_column,
+                        ft.Button(
+                            content="Show Trend",
+                            on_click=build_chart
+                        ),
+                        message,
+                        chart_container
+                    ],
+                    spacing=12,
+                    scroll=ft.ScrollMode.AUTO
+                ),
+                height=650,
+                width=900
+            ),
+            actions=[
+                ft.Button(
+                    content="Close",
+                    on_click=lambda e: page.pop_dialog()
+                )
+            ]
+        )
+    )
+
 def main(page: ft.Page):
     page.title = "Kitchen Inventory"
 
@@ -1393,6 +1620,11 @@ def main(page: ft.Page):
                         open_add_item_button,
                         open_inventory_button,
                         open_inventory_table_button,
+                        ft.Button(
+                            content="Trends",
+                            icon=ft.Icons.SHOW_CHART,
+                            on_click=lambda e: open_trends_dialog(page)
+                        ),
                         ft.Button(
                             content="Settings",
                             icon=ft.Icons.SETTINGS,
