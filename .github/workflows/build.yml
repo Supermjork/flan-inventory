@@ -12,7 +12,16 @@ permissions:
 
 jobs:
   build:
-    runs-on: windows-latest
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            artifact: "Kitchen Inventory.exe"
+
+          - os: ubuntu-latest
+            artifact: "Kitchen Inventory"
+
+    runs-on: ${{ matrix.os }}
 
     steps:
       - name: Checkout repository
@@ -33,10 +42,12 @@ jobs:
           flet pack app.py -n "Kitchen Inventory"
 
       - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
         run: |
-          gh release create "${{ github.ref_name }}" `
-            "dist/Kitchen Inventory.exe" `
-            --title "Kitchen Inventory ${{ github.ref_name }}" `
+          gh release create "${{ github.ref_name }}" \
+            "dist/${{ matrix.artifact }}" \
+            --title "Kitchen Inventory ${{ github.ref_name }}" \
             --generate-notes
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
