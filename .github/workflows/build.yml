@@ -2,10 +2,13 @@ name: Build Kitchen Inventory
 
 on:
   push:
-    branches:
-      - main
+    tags:
+      - "v*"
 
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -29,8 +32,11 @@ jobs:
         run: |
           flet pack app.py -n "Kitchen Inventory"
 
-      - name: Upload application
-        uses: actions/upload-artifact@v4
-        with:
-          name: Kitchen-Inventory
-          path: "dist/Kitchen Inventory.exe"
+      - name: Create GitHub Release
+        run: |
+          gh release create "${{ github.ref_name }}" `
+            "dist/Kitchen Inventory.exe" `
+            --title "Kitchen Inventory ${{ github.ref_name }}" `
+            --generate-notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
