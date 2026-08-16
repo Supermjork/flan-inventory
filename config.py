@@ -1,7 +1,7 @@
 import json
-from pathlib import Path
+from paths import get_base_dir
 
-CONFIG_PATH = Path(__file__).parent / "config.json"
+CONFIG_PATH = get_base_dir() / "config.json"
 
 DEFAULT_THEME = {
     "text": "#D9D9DA",

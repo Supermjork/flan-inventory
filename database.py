@@ -1,8 +1,9 @@
 import sqlite3
+from paths import get_base_dir
 
 # Database Initialisation
 
-db = sqlite3.connect("inventory.db")
+db = sqlite3.connect(get_base_dir() / "inventory.db")
 
 db.execute("""
     CREATE TABLE IF NOT EXISTS items (
