@@ -3,6 +3,9 @@ import flet_datatable2 as fdt
 import flet_charts as fch
 import csv
 import re
+import json
+import urllib.request
+import urllib.error
 from pathlib import Path
 from datetime import datetime, timedelta
 from openpyxl import Workbook
@@ -34,6 +37,13 @@ COLOUR_XLSX_CELL = THEME["xlsx_header_bg"]
 COLOUR_PDF_HEADER_BG = THEME["pdf_header_bg"]
 COLOUR_SAVE_FAIL = THEME["save_fail"]
 COLOUR_SAVE_SUCCESS = THEME["save_success"]
+
+# App version — bump this to match the git tag (e.g. "1.0.0" for tag "v1.0.0")
+# each time you cut a release via the GitHub Actions workflow.
+APP_VERSION = "1.0.4"
+
+# Replace with your actual "owner/repo" on GitHub for the update check to work.
+GITHUB_REPO = "Supermjork/flan-inventory"
 
 
 HEX_COLOR_RE = re.compile(r"^#?[0-9A-Fa-f]{6}$")
@@ -1312,6 +1322,64 @@ def open_trends_dialog(page: ft.Page):
         )
     )
 
+def is_newer_version(latest, current):
+    try:
+        latest_parts = tuple(int(part) for part in latest.split("."))
+        current_parts = tuple(int(part) for part in current.split("."))
+        return latest_parts > current_parts
+    except ValueError:
+        return False
+
+def show_update_dialog(page: ft.Page, latest_version, release_url):
+    page.show_dialog(
+        ft.AlertDialog(
+            modal=True,
+            title=ft.Text("Update Available"),
+            content=ft.Text(
+                f"Version {latest_version} is available "
+                f"(you're on {APP_VERSION})."
+            ),
+            actions=[
+                ft.Button(
+                    content="Later",
+                    on_click=lambda e: page.pop_dialog()
+                ),
+                ft.Button(
+                    content="Download",
+                    on_click=lambda e: page.launch_url(release_url)
+                )
+            ],
+            actions_alignment=ft.MainAxisAlignment.END
+        )
+    )
+    page.update()
+
+def check_for_updates(page: ft.Page):
+    # Runs in a background thread (see page.run_thread in main()) so a
+    # slow or missing connection never blocks app startup. Any failure
+    # here — offline, rate-limited, no releases published yet — is
+    # swallowed silently; an update check should never crash the app.
+    try:
+        request = urllib.request.Request(
+            f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest",
+            headers={"Accept": "application/vnd.github+json"}
+        )
+
+        with urllib.request.urlopen(request, timeout=5) as response:
+            data = json.loads(response.read().decode())
+
+        latest_version = data.get("tag_name", "").lstrip("v")
+        release_url = data.get(
+            "html_url",
+            f"https://github.com/{GITHUB_REPO}/releases/latest"
+        )
+
+        if latest_version and is_newer_version(latest_version, APP_VERSION):
+            show_update_dialog(page, latest_version, release_url)
+
+    except (urllib.error.URLError, TimeoutError, ValueError, KeyError):
+        pass
+
 def main(page: ft.Page):
     page.title = "Kitchen Inventory"
 
@@ -1648,6 +1716,8 @@ def main(page: ft.Page):
     load_items(page, items_list, inventory_item, inventory_list)
     load_inventory_items(page, inventory_item)
     load_inventory(page, inventory_list)
+
+    page.run_thread(check_for_updates, page)
 
 
 ft.run(main)
