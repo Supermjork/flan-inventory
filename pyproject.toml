@@ -1,6 +1,6 @@
 [project]
 name = "kitchen-inventory"
-version = "1.0.6"
+version = "1.0.7"
 requires-python = ">=3.12"
 dependencies = [
     "flet==0.86.5",
