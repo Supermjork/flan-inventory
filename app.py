@@ -6,6 +6,7 @@ import re
 import json
 import urllib.request
 import urllib.error
+import webbrowser
 from pathlib import Path
 from datetime import datetime, timedelta
 from openpyxl import Workbook
@@ -39,10 +40,6 @@ from importer import (
     read_db
 )
 from config import THEME, WINDOW, save_config
-
-from importer import read_csv
-
-print(read_csv("./inventory.csv"))
 
 # Theme (see config.json to customize)
 COLOUR_TEXT = THEME["text"]
@@ -1348,6 +1345,9 @@ def is_newer_version(latest, current):
         return False
 
 def show_update_dialog(page: ft.Page, latest_version, release_url):
+    def open_release_page(e):
+        webbrowser.open_new_tab(release_url)
+
     page.show_dialog(
         ft.AlertDialog(
             modal=True,
@@ -1363,7 +1363,7 @@ def show_update_dialog(page: ft.Page, latest_version, release_url):
                 ),
                 ft.Button(
                     content="Download",
-                    on_click=lambda e: page.launch_url(release_url)
+                    on_click=open_release_page
                 )
             ],
             actions_alignment=ft.MainAxisAlignment.END
