@@ -49,8 +49,42 @@ jobs:
           name: ${{ matrix.name }}
           path: "dist/${{ matrix.file }}"
 
+  build-android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "17"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Build APK
+        run: |
+          flet build apk --module-name app.py --verbose
+
+      - name: Upload build
+        uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: build/apk/*.apk
+
   release:
-    needs: build
+    needs: [build, build-android]
     runs-on: ubuntu-latest
 
     steps:
@@ -69,11 +103,18 @@ jobs:
           name: linux
           path: release
 
+      - name: Download Android build
+        uses: actions/download-artifact@v4
+        with:
+          name: android
+          path: release
+
       - name: Create GitHub Release
         run: |
           gh release create "${{ github.ref_name }}" \
             release/"Kitchen Inventory.exe" \
             release/"Kitchen Inventory" \
+            release/*.apk \
             --title "Kitchen Inventory ${{ github.ref_name }}" \
             --generate-notes
         env:

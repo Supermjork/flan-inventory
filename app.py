@@ -17,15 +17,32 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph
 from database import (
     add_item as add_item_to_database,
     get_items,
+    get_item_by_name,
     update_item,
     count_inventory_for_item,
     delete_item,
     add_inventory,
     get_inventory,
+    get_inventory_amount,
+    upsert_inventory,
     update_inventory_record,
     delete_inventory_record
 )
+from importer import (
+    list_importable_files,
+    read_csv,
+    detect_orientation,
+    extract_labels,
+    extract_records,
+    split_name_unit,
+    validate_db_schema,
+    read_db
+)
 from config import THEME, WINDOW, save_config
+
+from importer import read_csv
+
+print(read_csv("./inventory.csv"))
 
 # Theme (see config.json to customize)
 COLOUR_TEXT = THEME["text"]
@@ -1380,6 +1397,314 @@ def check_for_updates(page: ft.Page):
     except (urllib.error.URLError, TimeoutError, ValueError, KeyError):
         pass
 
+def open_import_dialog(
+    page: ft.Page,
+    items_list: ft.Column,
+    inventory_item: ft.Dropdown,
+    inventory_list: ft.Column
+):
+    dialog = ft.AlertDialog(modal=True, title=ft.Text("Import"))
+
+    def show_step(content, actions):
+        dialog.content = ft.Container(content=content, width=420)
+        dialog.actions = actions
+        page.update()
+
+    def show_error(text):
+        show_step(
+            ft.Text(text, color=COLOUR_SAVE_FAIL),
+            actions=[
+                ft.Button(content="Back", on_click=lambda e: show_file_list()),
+                ft.Button(content="Close", on_click=lambda e: page.pop_dialog())
+            ]
+        )
+
+    # --- Step 1: pick a file (no native picker — see importer.py) ---
+    def show_file_list():
+        files = list_importable_files()
+
+        if not files:
+            show_step(
+                ft.Text("No .csv or .db files found in Downloads."),
+                actions=[
+                    ft.Button(content="Close", on_click=lambda e: page.pop_dialog())
+                ]
+            )
+            return
+
+        file_buttons = [
+            ft.Button(
+                content=path.name,
+                on_click=lambda e, p=path: handle_file_selected(p)
+            )
+            for path in files
+        ]
+
+        show_step(
+            ft.Column(
+                controls=[
+                    ft.Text("Select a file to import:"),
+                    ft.Column(
+                        controls=file_buttons,
+                        spacing=8,
+                        scroll=ft.ScrollMode.AUTO,
+                        height=250
+                    )
+                ],
+                spacing=12
+            ),
+            actions=[
+                ft.Button(content="Cancel", on_click=lambda e: page.pop_dialog())
+            ]
+        )
+
+    def handle_file_selected(path):
+        if path.suffix.lower() == ".db":
+            handle_db_selected(path)
+        else:
+            handle_csv_selected(path)
+
+    # --- CSV path: confirm orientation, then assign units ---
+    def handle_csv_selected(path):
+        try:
+            rows = read_csv(path)
+        except OSError as error:
+            show_error(f"Couldn't read {path.name}: {error}")
+            return
+
+        show_orientation_step(path, rows, detect_orientation(rows))
+
+    def show_orientation_step(path, rows, orientation):
+        preview = ft.Text(size=12, color=COLOUR_TEXT)
+
+        def refresh_preview(current_orientation):
+            labels = extract_labels(rows, current_orientation)
+
+            if labels:
+                shown = ", ".join(labels[:5])
+
+                if len(labels) > 5:
+                    shown += ", ..."
+
+                preview.value = f"Detected items: {shown}"
+            else:
+                preview.value = "No items detected with this layout."
+
+        def on_change(e):
+            refresh_preview(e.control.value)
+            preview.update()
+
+        refresh_preview(orientation)
+
+        radio_group = ft.RadioGroup(
+            value=orientation,
+            on_change=on_change,
+            content=ft.Column(
+                controls=[
+                    ft.Radio(
+                        value="dates_as_rows",
+                        label="Dates go down the rows (one row per date)"
+                    ),
+                    ft.Radio(
+                        value="dates_as_columns",
+                        label="Dates go across the columns"
+                    )
+                ]
+            )
+        )
+
+        show_step(
+            ft.Column(
+                controls=[
+                    ft.Text(f"Importing: {path.name}", weight=ft.FontWeight.BOLD),
+                    ft.Text("Confirm how this file is laid out:"),
+                    radio_group,
+                    preview
+                ],
+                spacing=12
+            ),
+            actions=[
+                ft.Button(content="Back", on_click=lambda e: show_file_list()),
+                ft.Button(
+                    content="Continue",
+                    on_click=lambda e: show_units_step(
+                        path, rows, radio_group.value
+                    )
+                )
+            ]
+        )
+
+    def show_units_step(path, rows, orientation):
+        labels = extract_labels(rows, orientation)
+
+        if not labels:
+            show_error(
+                "No items detected with this layout. "
+                "Go back and try the other option."
+            )
+            return
+
+        unit_fields = {}
+        field_rows = []
+
+        for label in labels:
+            name, guessed_unit = split_name_unit(label)
+            field = ft.TextField(label="Unit", value=guessed_unit, width=100)
+            unit_fields[label] = (name, field)
+            field_rows.append(
+                ft.Row(controls=[ft.Text(name, expand=True), field])
+            )
+
+        message = ft.Text()
+
+        def do_import(e):
+            for label, (name, field) in unit_fields.items():
+                if not field.value.strip():
+                    message.value = f"Please enter a unit for {name}."
+                    message.color = COLOUR_SAVE_FAIL
+                    page.update()
+                    return
+
+            name_unit_map = {
+                label: (name, field.value.strip())
+                for label, (name, field) in unit_fields.items()
+            }
+
+            resolved = [
+                (date, *name_unit_map.get(label, (label, "")), amount)
+                for date, label, amount in extract_records(rows, orientation)
+            ]
+
+            run_import(resolved)
+
+        show_step(
+            ft.Column(
+                controls=[
+                    ft.Text("Assign a unit for each item:", weight=ft.FontWeight.BOLD),
+                    ft.Column(
+                        controls=field_rows,
+                        spacing=8,
+                        scroll=ft.ScrollMode.AUTO,
+                        height=250
+                    ),
+                    message
+                ],
+                spacing=12
+            ),
+            actions=[
+                ft.Button(
+                    content="Back",
+                    on_click=lambda e: show_orientation_step(path, rows, orientation)
+                ),
+                ft.Button(content="Import", on_click=do_import)
+            ]
+        )
+
+    # --- .db path: strict schema check, then straight into resolution ---
+    def handle_db_selected(path):
+        if not validate_db_schema(path):
+            show_error(
+                f'"{path.name}" doesn\'t match this app\'s database '
+                "structure — rejected."
+            )
+            return
+
+        items, inventory = read_db(path)
+        item_lookup = {item_id: (name, unit) for item_id, name, unit in items}
+
+        resolved = [
+            (date, *item_lookup[item_id], amount)
+            for record_id, date, item_id, amount, unit in inventory
+            if item_id in item_lookup
+        ]
+
+        run_import(resolved)
+
+    # --- Shared: resolve/create items, detect conflicts, apply the rest ---
+    def run_import(resolved_records):
+        stats = {"added": 0, "overwritten": 0, "skipped": 0, "unchanged": 0}
+        conflicts = []
+
+        for date, name, unit, amount in resolved_records:
+            item = get_item_by_name(name)
+
+            if item is None:
+                add_item_to_database(name, unit)
+                item = get_item_by_name(name)
+
+            item_id = item[0]
+            existing = get_inventory_amount(date, item_id)
+
+            if existing is None:
+                add_inventory(date, item_id, amount, unit)
+                stats["added"] += 1
+            elif existing == amount:
+                stats["unchanged"] += 1
+            else:
+                conflicts.append((date, name, item_id, unit, existing, amount))
+
+        resolve_next_conflict(conflicts, 0, stats)
+
+    def resolve_next_conflict(conflicts, index, stats):
+        if index >= len(conflicts):
+            finish_import(stats)
+            return
+
+        date, name, item_id, unit, existing, new_amount = conflicts[index]
+
+        def skip(e):
+            stats["skipped"] += 1
+            resolve_next_conflict(conflicts, index + 1, stats)
+
+        def overwrite(e):
+            upsert_inventory(date, item_id, new_amount, unit)
+            stats["overwritten"] += 1
+            resolve_next_conflict(conflicts, index + 1, stats)
+
+        show_step(
+            ft.Column(
+                controls=[
+                    ft.Text(f"{name} — {date}", weight=ft.FontWeight.BOLD),
+                    ft.Text(f"Current value: {existing} {unit}"),
+                    ft.Text(f"Imported value: {new_amount} {unit}"),
+                    ft.Text(
+                        f"Conflict {index + 1} of {len(conflicts)}",
+                        size=12,
+                        color=COLOUR_TEXT
+                    )
+                ],
+                spacing=8
+            ),
+            actions=[
+                ft.Button(content="Skip", on_click=skip),
+                ft.Button(content="Overwrite", on_click=overwrite)
+            ]
+        )
+
+    def finish_import(stats):
+        load_items(page, items_list, inventory_item, inventory_list)
+        load_inventory_items(page, inventory_item)
+        load_inventory(page, inventory_list)
+
+        show_step(
+            ft.Column(
+                controls=[
+                    ft.Text("Import Complete", weight=ft.FontWeight.BOLD),
+                    ft.Text(f"Added: {stats['added']}"),
+                    ft.Text(f"Overwritten: {stats['overwritten']}"),
+                    ft.Text(f"Skipped: {stats['skipped']}"),
+                    ft.Text(f"Already up to date: {stats['unchanged']}")
+                ],
+                spacing=8
+            ),
+            actions=[
+                ft.Button(content="Close", on_click=lambda e: page.pop_dialog())
+            ]
+        )
+
+    page.show_dialog(dialog)
+    show_file_list()
+
 def main(page: ft.Page):
     page.title = "Kitchen Inventory"
 
@@ -1688,6 +2013,13 @@ def main(page: ft.Page):
                         open_add_item_button,
                         open_inventory_button,
                         open_inventory_table_button,
+                        ft.Button(
+                            content="Import",
+                            icon=ft.Icons.UPLOAD_FILE,
+                            on_click=lambda e: open_import_dialog(
+                                page, items_list, inventory_item, inventory_list
+                            )
+                        ),
                         ft.Button(
                             content="Trends",
                             icon=ft.Icons.SHOW_CHART,
