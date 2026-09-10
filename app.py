@@ -2,8 +2,10 @@ import flet as ft
 import flet_datatable2 as fdt
 import flet_charts as fch
 import csv
+import os
 import re
 import json
+import tomllib
 import urllib.request
 import urllib.error
 import webbrowser
@@ -52,9 +54,21 @@ COLOUR_PDF_HEADER_BG = THEME["pdf_header_bg"]
 COLOUR_SAVE_FAIL = THEME["save_fail"]
 COLOUR_SAVE_SUCCESS = THEME["save_success"]
 
-# App version — bump this to match the git tag (e.g. "1.0.0" for tag "v1.0.0")
-# each time you cut a release via the GitHub Actions workflow.
-APP_VERSION = "1.0.4"
+def get_app_version():
+    """Read the release version from CI or the project's package metadata."""
+    version = os.environ.get("APP_VERSION")
+    if version:
+        return version.removeprefix("v")
+
+    pyproject_path = Path(__file__).with_name("pyproject.toml")
+    try:
+        with pyproject_path.open("rb") as pyproject_file:
+            return tomllib.load(pyproject_file)["project"]["version"]
+    except (FileNotFoundError, KeyError, tomllib.TOMLDecodeError):
+        return "0.0.0"
+
+
+APP_VERSION = get_app_version()
 
 # Replace with your actual "owner/repo" on GitHub for the update check to work.
 GITHUB_REPO = "Supermjork/flan-inventory"
