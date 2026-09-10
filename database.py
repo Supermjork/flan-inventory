@@ -52,6 +52,12 @@ def get_items():
         ORDER BY id
     """).fetchall()
 
+def get_item_by_name(name):
+    return db.execute(
+        "SELECT id, name, unit FROM items WHERE name = ? COLLATE NOCASE",
+        (name,)
+    ).fetchone()
+
 def update_item(item_id, name, unit):
     try:
         db.execute(
@@ -100,6 +106,27 @@ def get_inventory():
         JOIN items ON inventory.item_id = items.id
         ORDER BY inventory.date, inventory.item_id
     """).fetchall()
+
+def get_inventory_amount(date, item_id):
+    row = db.execute(
+        "SELECT amount FROM inventory WHERE date = ? AND item_id = ?",
+        (date, item_id)
+    ).fetchone()
+
+    return row[0] if row else None
+
+def upsert_inventory(date, item_id, amount, unit):
+    db.execute(
+        """
+        INSERT INTO inventory (date, item_id, amount, unit)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(date, item_id) DO UPDATE SET
+            amount = excluded.amount,
+            unit = excluded.unit
+        """,
+        (date, item_id, amount, unit)
+    )
+    db.commit()
 
 def update_inventory_record(record_id, date, amount):
     try:
